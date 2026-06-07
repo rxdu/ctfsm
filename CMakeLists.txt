@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.21)
 project(ctfsm VERSION 0.1.0 LANGUAGES CXX
         DESCRIPTION "A compile-time finite-state-machine engine for real-time, safety-critical control")
 
+# Standard build-tree layout: executables in build/bin, libraries in build/lib.
+# Only when top-level, so vendoring ctfsm doesn't override the parent's layout.
+if(PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
+endif()
+
 # --- the header-only library ---
 add_library(ctfsm INTERFACE)
 add_library(ctfsm::ctfsm ALIAS ctfsm)
