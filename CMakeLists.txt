@@ -21,10 +21,20 @@ if(CTFSM_BUILD_TESTS)
   set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
-  add_executable(ctfsm_tests test/test_state_machine.cpp)
+  add_executable(ctfsm_tests test/test_state_machine.cpp test/test_realtime.cpp)
   target_link_libraries(ctfsm_tests PRIVATE ctfsm::ctfsm GTest::gtest_main)
   target_compile_options(ctfsm_tests PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME ctfsm_tests COMMAND ctfsm_tests)
+
+  # Real-time proof: the engine must build and run with NO exceptions and NO
+  # RTTI. If a header used throw/typeid/dynamic_cast, this would fail to compile.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_executable(ctfsm_freestanding test/freestanding.cpp)
+    target_link_libraries(ctfsm_freestanding PRIVATE ctfsm::ctfsm)
+    target_compile_options(ctfsm_freestanding
+        PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti)
+    add_test(NAME ctfsm_freestanding COMMAND ctfsm_freestanding)
+  endif()
 endif()
 
 # --- examples (runnable references; also registered as tests above) ---
