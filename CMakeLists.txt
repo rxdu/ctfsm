@@ -33,11 +33,56 @@ if(CTFSM_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
-# --- install / export (consumers may also just add_subdirectory or vendor) ---
-include(GNUInstallDirs)
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(TARGETS ctfsm EXPORT ctfsmTargets)
-install(EXPORT ctfsmTargets
-    FILE ctfsmTargets.cmake
-    NAMESPACE ctfsm::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ctfsm)
+# --- install / export / package (gated; off when ctfsm is a subproject) ---
+# Three integration paths are supported:
+#   1. source       : add_subdirectory(ctfsm) + link ctfsm::ctfsm
+#   2. find_package : install, then find_package(ctfsm) + link ctfsm::ctfsm
+#   3. deb          : cpack -> .deb, then dpkg -i, then find_package(ctfsm)
+option(CTFSM_INSTALL "Generate install + package rules" ${PROJECT_IS_TOP_LEVEL})
+if(CTFSM_INSTALL)
+  include(GNUInstallDirs)
+  include(CMakePackageConfigHelpers)
+
+  set(CTFSM_CMAKEDIR ${CMAKE_INSTALL_LIBDIR}/cmake/ctfsm)
+
+  install(TARGETS ctfsm EXPORT ctfsmTargets
+      INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(DIRECTORY include/ctfsm DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(EXPORT ctfsmTargets
+      FILE ctfsmTargets.cmake
+      NAMESPACE ctfsm::
+      DESTINATION ${CTFSM_CMAKEDIR})
+
+  configure_package_config_file(
+      cmake/ctfsmConfig.cmake.in
+      "${CMAKE_CURRENT_BINARY_DIR}/ctfsmConfig.cmake"
+      INSTALL_DESTINATION ${CTFSM_CMAKEDIR})
+  write_basic_package_version_file(
+      "${CMAKE_CURRENT_BINARY_DIR}/ctfsmConfigVersion.cmake"
+      VERSION ${PROJECT_VERSION}
+      COMPATIBILITY SameMajorVersion          # header-only: any 0.x consumes any 0.y
+      ARCH_INDEPENDENT)
+  install(FILES
+      "${CMAKE_CURRENT_BINARY_DIR}/ctfsmConfig.cmake"
+      "${CMAKE_CURRENT_BINARY_DIR}/ctfsmConfigVersion.cmake"
+      DESTINATION ${CTFSM_CMAKEDIR})
+
+  # --- CPack: produce an architecture-independent .deb (header-only) ---
+  set(CPACK_PACKAGE_NAME "ctfsm")
+  set(CPACK_PACKAGE_VENDOR "Ruixiang Du")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+      "A compile-time finite-state-machine engine for real-time, safety-critical control.")
+  set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+  set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+  set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+  set(CPACK_PACKAGING_INSTALL_PREFIX "/usr/local")
+  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+  set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+  set(CPACK_GENERATOR "DEB")
+  set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Ruixiang Du")
+  set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "all")  # header-only -> arch-independent
+  set(CPACK_DEBIAN_PACKAGE_SECTION "libdevel")
+  set(CPACK_SOURCE_IGNORE_FILES /.git /build.* /\\.DS_Store)
+  include(CPack)
+endif()

@@ -58,14 +58,33 @@ fsm.Dispatch(Coin{}, ctx);   // -> Unlocked (if Allowed); else refused, with rea
 
 > Guards and actions are **default-constructible functor types** (not lambdas — captureless lambdas aren't default-constructible in C++17). They may define `static constexpr std::string_view kName` for nicer traces.
 
-## Use it
+## Integrate
 
-Header-only — vendor it (submodule) and `add_subdirectory`, or install:
+Header-only. Three supported paths, all exposing the same `ctfsm::ctfsm` target:
 
+**1. Source** — vendor (submodule/subtree) and add the subdirectory:
 ```cmake
 add_subdirectory(third_party/ctfsm)
 target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
 ```
+
+**2. `find_package`** — install once, then consume:
+```sh
+cmake -S . -B build && cmake --build build && cmake --install build --prefix /usr/local
+```
+```cmake
+find_package(ctfsm 0.1.0 REQUIRED)
+target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
+```
+
+**3. Debian package** — build a `.deb` and install system-wide:
+```sh
+cmake -S . -B build && cd build && cpack -G DEB        # -> ctfsm_<ver>_all.deb
+sudo dpkg -i ctfsm_*_all.deb                            # installs headers + CMake config
+```
+then use `find_package(ctfsm)` as above.
+
+> When `ctfsm` is consumed as a subproject (`add_subdirectory`), its install/package and test/example rules default **off** (`CTFSM_INSTALL`, `CTFSM_BUILD_TESTS`, `CTFSM_BUILD_EXAMPLES`), so it doesn't pollute the parent build.
 
 Build the tests and examples:
 ```sh
