@@ -2,10 +2,13 @@
 // Copyright (c) 2026 Ruixiang Du
 //
 // The "hello world" of state machines: a coin-operated turnstile.
-// Doubles as a runnable reference and a CTest test (self-checks, exits non-zero
-// on failure regardless of build type — see CHECK below).
+//
+// Recommended structure: wrap the machine in a small class that OWNS the FSM as
+// a private member and exposes a domain API. Callers see intent (InsertCoin /
+// PushThrough), not transitions; the context, states, events, action, and table
+// are private implementation detail grouped in one place. Doubles as a CTest
+// test (self-checks; exits non-zero on failure regardless of build type).
 #include <iostream>
-#include <string_view>
 
 #include "ctfsm/fsm.hpp"
 
@@ -19,53 +22,65 @@
 
 namespace {
 
-struct Ctx {
-  int coins = 0;
-};
+class Turnstile {
+ public:
+  Turnstile() { fsm_.Start(ctx_); }
 
-// States — value types with optional lifecycle hooks.
-struct Locked {
-  void OnEnter(Ctx&) { std::cout << "  [enter] Locked\n"; }
-};
-struct Unlocked {
-  void OnEnter(Ctx&) { std::cout << "  [enter] Unlocked\n"; }
-};
+  // Domain API — what the turnstile does, not how it transitions.
+  void InsertCoin() { fsm_.Dispatch(Coin{}, ctx_); }
+  void PushThrough() { fsm_.Dispatch(Push{}, ctx_); }
 
-// Events — plain tag types.
-struct Coin {};
-struct Push {};
+  bool locked() const { return fsm_.IsIn<Locked>(); }
+  int coins() const { return ctx_.coins; }
 
-// An action: count the coin that unlocked us.
-struct CountCoin {
-  void operator()(Ctx& c) const noexcept { ++c.coins; }
+ private:
+  // --- everything the machine is made of, grouped here ---
+  struct Ctx {
+    int coins = 0;
+  };
+
+  struct Locked {
+    void OnEnter(Ctx&) { std::cout << "  [enter] Locked\n"; }
+  };
+  struct Unlocked {
+    void OnEnter(Ctx&) { std::cout << "  [enter] Unlocked\n"; }
+  };
+
+  struct Coin {};
+  struct Push {};
+
+  struct CountCoin {
+    void operator()(Ctx& c) const noexcept { ++c.coins; }
+  };
+
+  //                       From    Event  To        Guard          Action
+  using Fsm = ctfsm::StateMachine<
+      Ctx, ctfsm::StateList<Locked, Unlocked>,
+      ctfsm::Table<ctfsm::Row<Locked, Coin, Unlocked, ctfsm::Always, CountCoin>,
+                   ctfsm::Row<Unlocked, Push, Locked>>>;
+
+  Ctx ctx_{};
+  Fsm fsm_{};
 };
-
-//                  From      Event  To        Guard           Action
-using Turnstile = ctfsm::StateMachine<
-    Ctx, ctfsm::StateList<Locked, Unlocked>,
-    ctfsm::Table<ctfsm::Row<Locked, Coin, Unlocked, ctfsm::Always, CountCoin>,
-                 ctfsm::Row<Unlocked, Push, Locked>>>;
 
 }  // namespace
 
 int main() {
-  Ctx ctx;
-  Turnstile fsm;
-  fsm.Start(ctx);  // -> Locked
-  CHECK(fsm.IsIn<Locked>());
+  Turnstile t;
+  CHECK(t.locked());
 
   std::cout << "insert coin:\n";
-  CHECK(fsm.Dispatch(Coin{}, ctx));  // Locked --Coin--> Unlocked
-  CHECK(fsm.IsIn<Unlocked>());
-  CHECK(ctx.coins == 1);
+  t.InsertCoin();
+  CHECK(!t.locked());
+  CHECK(t.coins() == 1);
 
   std::cout << "push through:\n";
-  CHECK(fsm.Dispatch(Push{}, ctx));  // Unlocked --Push--> Locked
-  CHECK(fsm.IsIn<Locked>());
+  t.PushThrough();
+  CHECK(t.locked());
 
   std::cout << "push again while locked (no such transition -> ignored):\n";
-  CHECK(!fsm.Dispatch(Push{}, ctx));
-  CHECK(fsm.IsIn<Locked>());
+  t.PushThrough();
+  CHECK(t.locked());
 
   std::cout << "turnstile OK\n";
   return 0;
