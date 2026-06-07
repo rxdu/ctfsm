@@ -1,0 +1,3 @@
+title: ctfsm
+description: A compile-time finite-state-machine engine for real-time, safety-critical robotics control
+theme: jekyll-theme-cayman
