@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(ctfsm VERSION 0.1.0 LANGUAGES CXX
+project(ctfsm VERSION 0.2.0 LANGUAGES CXX
         DESCRIPTION "A compile-time finite-state-machine engine for real-time, safety-critical control")
 
 # Standard build-tree layout: executables in build/bin, libraries in build/lib.
@@ -29,19 +29,33 @@ if(CTFSM_BUILD_TESTS)
   set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
-  add_executable(ctfsm_tests test/test_state_machine.cpp test/test_realtime.cpp)
+  add_executable(ctfsm_tests
+      test/test_state_machine.cpp
+      test/test_semantics.cpp
+      test/test_realtime.cpp)
   target_link_libraries(ctfsm_tests PRIVATE ctfsm::ctfsm GTest::gtest_main)
   target_compile_options(ctfsm_tests PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME ctfsm_tests COMMAND ctfsm_tests)
 
-  # Real-time proof: the engine must build and run with NO exceptions and NO
-  # RTTI. If a header used throw/typeid/dynamic_cast, this would fail to compile.
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # Real-time proof: the engine must build and run with NO exceptions and NO
+    # RTTI. If a header used throw/typeid/dynamic_cast, this fails to compile.
     add_executable(ctfsm_freestanding test/test_freestanding.cpp)
     target_link_libraries(ctfsm_freestanding PRIVATE ctfsm::ctfsm)
     target_compile_options(ctfsm_freestanding
         PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti)
     add_test(NAME ctfsm_freestanding COMMAND ctfsm_freestanding)
+
+    # Negative compile tests: each invalid table MUST fail to compile (proving
+    # the compile-time graph checks fire). WILL_FAIL inverts the result.
+    foreach(bad bad_to_state ambiguous unreachable)
+      add_test(NAME compile_fail_${bad}
+          COMMAND ${CMAKE_CXX_COMPILER} -std=c++17
+                  -I${CMAKE_CURRENT_SOURCE_DIR}/include
+                  -c ${CMAKE_CURRENT_SOURCE_DIR}/test/compile_fail/${bad}.cpp
+                  -o ${CMAKE_CURRENT_BINARY_DIR}/${bad}.o)
+      set_tests_properties(compile_fail_${bad} PROPERTIES WILL_FAIL TRUE)
+    endforeach()
   endif()
 endif()
 

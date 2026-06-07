@@ -33,6 +33,12 @@ struct FsmObserver {
     (void)from;
     (void)event;
   }
+  // A hook tried to drive its own machine (re-entrant call); it was refused
+  // with no state change. Indicates a logic error — see StateMachine's
+  // contract.
+  virtual void OnReentrancyBlocked(std::string_view state) noexcept {
+    (void)state;
+  }
   virtual ~FsmObserver() = default;
 };
 

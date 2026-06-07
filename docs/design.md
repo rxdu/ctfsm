@@ -1,6 +1,6 @@
 # Spec — `ctfsm`, an owned compile-time state-machine framework
 
-- **Status:** Implemented (v0.1.0)
+- **Status:** Implemented (v0.2.0)
 - **Owns:** the generic FSM engine (this repo). Replaces the dependency on `xmotion`'s `fsm_template`. xmotion stays out unless a later, unrelated need (HID device I/O) brings it back.
 - **Realizes:** the production-FSM requirements discussed — explicit state lifecycle, a declared+enforced transition graph, guarded transitions with refusal reasons, trace hooks, and compile-time verification — while keeping the prior design's real-time purity (no heap, value-type states).
 
@@ -65,20 +65,22 @@ class StateMachine {
   explicit StateMachine(FsmObserver* observer = nullptr) noexcept;
 
   void Start(Context& ctx) noexcept;                 // enter the initial state (OnEnter)
+  void Stop(Context& ctx) noexcept;                  // run the active state's OnExit (shutdown)
   void Update(Context& ctx) noexcept;                // current.Update(), then auto-transitions
 
   template <class Event>
   bool Dispatch(const Event& ev, Context& ctx) noexcept;   // process an external event
 
   template <class State> bool IsIn() const noexcept; // introspection
+  bool started() const noexcept;
   std::string_view CurrentName() const noexcept;     // for per-tick trace
-  int CurrentId() const noexcept;
+  std::size_t CurrentId() const noexcept;
 };
 
 }  // namespace ctfsm
 ```
 
-`noexcept` is conditional on the user hooks being `noexcept` (the framework propagates it). State storage is a preallocated `std::tuple<States...>` member (§7).
+The public API is unconditionally `noexcept` — a throwing user hook therefore hits the `noexcept` boundary and calls `std::terminate` (fail-stop; keep hooks `noexcept`). State storage is a preallocated `std::tuple<States...>` member (§7). The engine is **non-reentrant**: a hook must not call `Start`/`Stop`/`Update`/`Dispatch` on its own machine — such calls are refused (no state change) and reported via `OnReentrancyBlocked`.
 
 ---
 
@@ -107,11 +109,10 @@ The whole legal graph is right here, reviewable. The engine **only** ever takes 
 2. Evaluate **completion transitions** for the current state: scan `Row<Current, Completion, …>` rows in declaration order; take the first whose guard passes (runs the transition sequence below). At most one auto-transition per `Update`.
 
 **`Dispatch(event, ctx)`** — external event:
-1. Gather rows matching `(From ∈ {Current, AnyState}, Event == event_type)`.
-2. **Resolution order:** exact-`From` rows take precedence over `AnyState` rows; within the same specificity, **declaration order**; the first row whose **guard passes** wins.
-3. If a winner is found → run the transition sequence; return `true`.
-4. If rows matched but **all guards failed** → emit `OnRefused{from, event, guard}` for the first such guard; return `false`. (This is the refusal-with-reason path.)
-5. If **no row matched** at all → emit `OnIgnored{from, event}`; return `false`.
+1. **Exact pass:** scan concrete-`From` rows for this event in declaration order; the first whose **guard passes** wins → run the transition sequence; return `true`.
+2. **No fall-through on refusal:** if an exact row matched the `(state, event)` but its guard(s) refused, **stop** — return `false` and emit `OnRefused{from, event, guard}` (first refusing guard). A declared, guard-blocked transition does *not* silently fall through to a wildcard.
+3. **Wildcard pass:** only if **no exact row matched** the `(state, event)` at all, scan `AnyState` rows (declaration order, first passing guard wins). Take it → `true`.
+4. If nothing applied: `OnRefused` if a wildcard guard refused, else `OnIgnored{from, event}`; return `false`.
 
 **Transition sequence** (taken by both paths): `current.OnExit(ctx)` → `Action{}(ctx)` → switch current index → `next.OnEnter(ctx)` → `OnTransition{from, event, to}`. Exactly one `OnExit`/`OnEnter` pair; ordering is fixed and documented (no hidden xmotion semantics).
 
@@ -121,14 +122,12 @@ Determinism: resolution is a pure function of (current state, event type, guard 
 
 ## 6. Compile-time guarantees (`static_assert`)
 
-The table being *types* lets the engine prove properties at build time:
-- Every `From`/`To` in every row is a type listed in `StateList` (no typo'd/orphan states).
-- Every state in `StateList` is **reachable** (is the initial state or appears as some `To`). Unreachable state → build error.
-- No duplicate **unconditional** rows for the same `(From, Event)` (ambiguous graph with `Always` guards) → build error.
-- The initial state and every `From=AnyState` target are valid states.
-- (Best-effort) every state has at least one outgoing transition, or is explicitly marked terminal.
+The table being *types* lets the engine prove properties at build time — all implemented, and covered by negative compile tests in `test/compile_fail/`:
+- Every `From`/`To` is a state in `StateList` (or `AnyState` for `From`) — no typo'd/orphan states.
+- Every state in `StateList` is **reachable** — the initial state or some row's `To`. Unreachable → build error.
+- **No two rows share a `(From, Event, Guard)` key** → build error. (Same `From`/`Event` with *different* guards is allowed — first passing guard wins; identical keys are unresolvable ambiguity.)
 
-These turn "I hope every transition respects the graph" into "the graph is verified before the binary exists."
+These turn "I hope every transition respects the graph" into "the graph is verified before the binary exists." (Dead-row detection beyond key-ambiguity and terminal-state marking are future work.)
 
 ---
 

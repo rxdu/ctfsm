@@ -9,13 +9,14 @@ Header-only C++17. States and the transition graph are plain types: the graph is
 Most C++ FSM choices are either runtime/polymorphic (heap, vtables, the graph only checked at runtime) or powerful-but-cryptic metaprogramming. `ctfsm` aims for a small, readable middle: the **transition table is the single source of truth** for the graph, the engine *enforces* it, and the real-time properties are explicit guarantees, not hopes.
 
 - **Declarative table** — the whole legal graph in one place; illegal transitions aren't expressible.
-- **Compile-time checks** — every `From`/`To` must be a real state (more checks planned).
-- **Explicit lifecycle** — optional `OnEnter` / `Update` / `OnExit` per state.
-- **Guarded transitions with reasons** — a refused transition is reported with the guard that blocked it.
+- **Compile-time-verified graph** — `From`/`To` must be real states, every state must be reachable, and no two rows may share a `(From, Event, Guard)` key (ambiguity is a build error). Verified by negative compile tests.
+- **Explicit lifecycle** — optional `OnEnter` / `Update` / `OnExit`; `Start(ctx)` enters, `Stop(ctx)` runs the active state's `OnExit` (your shutdown cleanup, e.g. zero torques).
+- **Guarded transitions with reasons** — a refused transition is reported with the guard that blocked it, and a guard-blocked *specific* transition does **not** silently fall through to a wildcard.
 - **Completion (auto) transitions** — guard-triggered, evaluated each `Update()`.
 - **Wildcards** — `AnyState` rows for shared transitions (e.g. E-stop from anywhere).
 - **Traceable** — an observer is notified on every enter/exit/transition/refusal (off the per-tick path).
-- **RT-safe** — preallocated states, no heap, no RTTI, no exceptions; bounded, deterministic dispatch.
+- **Safe by contract** — single-threaded, non-reentrant; a re-entrant call is refused (never aborts) and reported.
+- **RT-safe, verified** — preallocated states, no heap, no RTTI, no exceptions; bounded, deterministic dispatch. Proven by tests (0 allocations / 100k ticks) and a `-fno-exceptions -fno-rtti` build.
 
 ## Quick example
 
@@ -73,7 +74,7 @@ target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
 cmake -S . -B build && cmake --build build && cmake --install build --prefix /usr/local
 ```
 ```cmake
-find_package(ctfsm 0.1.0 REQUIRED)
+find_package(ctfsm 0.2.0 REQUIRED)
 target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
 ```
 
@@ -109,9 +110,33 @@ Runnable references in [`examples/`](examples/) — they narrate what they do, s
   [transition] Walking --EStop--> Passive
 ```
 
+## Lifecycle & contract
+
+```cpp
+Controller c;            // owns the FSM
+fsm.Start(ctx);          // enter the initial state (once)
+while (running) {
+  drain_events_into(fsm, ctx);   // fsm.Dispatch(ev, ctx) per external event
+  fsm.Update(ctx);               // current state's per-tick action (+ auto-transitions)
+}
+fsm.Stop(ctx);           // run the active state's OnExit — your safe-shutdown hook
+```
+
+- **Single-threaded, non-reentrant.** Deliver events from other threads through your own (lock-free) queue and `Dispatch` them on the control thread. A hook must not drive its own machine — set a flag in the context and let the next tick act (or use a `Completion` row).
+- A throwing state hook hits a `noexcept` boundary → `std::terminate` (fail-stop). Keep hooks `noexcept`.
+
+## Limitations (v0.2.0)
+
+Known and deliberate; documented so they're not surprises:
+- **No hierarchy / regions / history** — shared transitions use `AnyState` wildcards; nested-state grouping and resume-state are future work.
+- **One completion transition per `Update`** (bounded, no cascade); a chain of pass-through states advances one per tick.
+- **Events are types, not values** — carry per-event data in the context (e.g. commanded velocity).
+- **Refusal reasons reach the observer, not the `Dispatch` return** (which is `bool`); attach a small observer to capture them programmatically.
+- **Not a certified-safety (MISRA/DO-178) subset** — heavy templates + `std::tuple`/`string_view`. Fine for industrial robotics; a separate effort for certified contexts.
+
 ## Status & design
 
-v0.1.0 — flat states + wildcard rows; hierarchy/regions are a documented future extension. The full design, semantics, and real-time contract are in [`docs/design.md`](docs/design.md).
+v0.2.0 — production-hardened (verified graph, `Stop`/shutdown, re-entrancy refusal, no-fall-through resolution). Flat states + wildcard rows; hierarchy/regions are future work. Full design, semantics, and the real-time contract: [`docs/design.md`](docs/design.md); release history: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
