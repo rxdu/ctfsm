@@ -1,0 +1,36 @@
+name: release
+
+# On a version tag, build + test, package the .deb, and publish a GitHub
+# Release with the package attached and auto-generated notes.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write  # required to create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build
+
+      - name: Build & test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+      - name: Package (.deb)
+        run: cd build && cpack -G DEB
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" build/*.deb \
+            --title "ctfsm ${GITHUB_REF_NAME}" \
+            --generate-notes
