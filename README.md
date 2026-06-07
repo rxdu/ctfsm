@@ -1,142 +1,81 @@
 # ctfsm
 
-A compile-time FSM engine that turns a declarative transition table into a verified, allocation-free state machine for real-time, safety-critical robotics control.
+**A compile-time FSM engine that turns a declarative transition table into a verified, allocation-free state machine for real-time, safety-critical robotics control.**
 
-Header-only C++17. States and the transition graph are plain types: the graph is **verified at compile time**, dispatch is **allocation-free, RTTI-free, and bounded**, and every transition/refusal is **traceable** through an observer — real-time and deterministic by construction.
+Header-only C++17. States and the transition graph are plain types: the graph is verified at *compile time*, dispatch is allocation-free with no RTTI or exceptions, and every transition is traceable — real-time and deterministic by construction.
 
-## Why
+## Design philosophy
 
-Most C++ FSM choices are either runtime/polymorphic (heap, vtables, the graph only checked at runtime) or powerful-but-cryptic metaprogramming. `ctfsm` aims for a small, readable middle: the **transition table is the single source of truth** for the graph, the engine *enforces* it, and the real-time properties are explicit guarantees, not hopes.
+- **The table is the single source of truth.** The whole legal graph is declared once, as data; the engine is the *only* path that changes state. No transition lives anywhere else.
+- **Verify at compile time.** Typo'd states, unreachable states, and ambiguous rows are *build errors*, not runtime surprises — the safety graph is checked before the binary exists.
+- **Real-time by construction.** Value-type states, no heap, no RTTI, no exceptions, bounded deterministic dispatch — *proven* by tests (0 allocations / 100k ticks) and a `-fno-exceptions -fno-rtti` build, not just claimed.
+- **Own your semantics.** A small engine you can read top to bottom, with an explicit, documented lifecycle and transition ordering — no hidden framework behavior.
+- **Fail safe, stay observable.** A re-entrant or illegal call is refused, never aborts; every transition/refusal/refusal-reason flows to an observer.
 
-- **Declarative table** — the whole legal graph in one place; illegal transitions aren't expressible.
-- **Compile-time-verified graph** — `From`/`To` must be real states, every state must be reachable, and no two rows may share a `(From, Event, Guard)` key (ambiguity is a build error). Verified by negative compile tests.
-- **Explicit lifecycle** — optional `OnEnter` / `Update` / `OnExit`; `Start(ctx)` enters, `Stop(ctx)` runs the active state's `OnExit` (your shutdown cleanup, e.g. zero torques).
-- **Guarded transitions with reasons** — a refused transition is reported with the guard that blocked it, and a guard-blocked *specific* transition does **not** silently fall through to a wildcard.
-- **Completion (auto) transitions** — guard-triggered, evaluated each `Update()`.
-- **Wildcards** — `AnyState` rows for shared transitions (e.g. E-stop from anywhere).
-- **Traceable** — an observer is notified on every enter/exit/transition/refusal (off the per-tick path).
-- **Safe by contract** — single-threaded, non-reentrant; a re-entrant call is refused (never aborts) and reported.
-- **RT-safe, verified** — preallocated states, no heap, no RTTI, no exceptions; bounded, deterministic dispatch. Proven by tests (0 allocations / 100k ticks) and a `-fno-exceptions -fno-rtti` build.
+## Features
 
-## Quick example
+- Compile-time-verified transition table — reachability + `(From,Event,Guard)` ambiguity checks.
+- Per-state `OnEnter` / `Update` / `OnExit` (all optional); `Start` / `Stop` lifecycle (`Stop` runs the active state's `OnExit` — your shutdown cleanup).
+- **Guards** with refusal reasons; **actions**; **completion** (auto) transitions; **`AnyState`** wildcards for shared transitions (e.g. E-stop from anywhere).
+- Trace **observer** (notified only on transitions — off the per-tick path).
+- Three integration paths (source / `find_package` / `.deb`), all exposing `ctfsm::ctfsm`.
+
+## Example
 
 ```cpp
+#include <iostream>
+
 #include "ctfsm/fsm.hpp"
 
-struct Ctx { bool ready = false; };
+struct Ctx { bool homed = false; };
 
-struct Booting { void OnEnter(Ctx&) {} };
-struct Running { void Update(Ctx&) {} };
+// States — value types; every hook is optional.
+struct Idle    { void OnEnter(Ctx&) { std::cout << "idle\n"; } };
+struct Running { void Update(Ctx&)  { /* per-tick control action */ } };
+struct Fault   { void OnEnter(Ctx&) { std::cout << "FAULT\n"; } };
 
-struct WhenReady { bool operator()(const Ctx& c) const noexcept { return c.ready; } };
+// Events (tags) and a guard (a default-constructible functor — not a lambda).
+struct Start {};  struct Trip {};
+struct Homed { bool operator()(const Ctx& c) const noexcept { return c.homed; } };
 
-using Boot = ctfsm::StateMachine<
-    Ctx,
-    ctfsm::StateList<Booting, Running>,                       // first = initial
-    ctfsm::Table<ctfsm::Row<Booting, ctfsm::Completion, Running, WhenReady>>>;
-
-Ctx ctx;
-Boot fsm;
-fsm.Start(ctx);          // enters Booting
-fsm.Update(ctx);         // stays until ctx.ready, then auto-advances to Running
-```
-
-External events and guarded/actioned transitions:
-```cpp
-struct Coin {}; struct Push {};
-struct Allowed { bool operator()(const Ctx&) const noexcept { return true; } };
-struct AddCoin { void operator()(Ctx&) const noexcept {} };
-
-using Turnstile = ctfsm::StateMachine<Ctx,
-    ctfsm::StateList<Locked, Unlocked>,
+using Machine = ctfsm::StateMachine<Ctx,
+    ctfsm::StateList<Idle, Running, Fault>,                 // first = initial state
     ctfsm::Table<
-        ctfsm::Row<Locked,   Coin, Unlocked, Allowed, AddCoin>,
-        ctfsm::Row<Unlocked, Push, Locked>,
-        ctfsm::Row<ctfsm::AnyState, Reset, Locked>>>;   // shared, from any state
+        ctfsm::Row<Idle,            Start, Running, Homed>, // guarded: only if homed
+        ctfsm::Row<ctfsm::AnyState, Trip,  Fault>>>;        // wildcard: trip from anywhere
 
-fsm.Dispatch(Coin{}, ctx);   // -> Unlocked (if Allowed); else refused, with reason
+int main() {
+  Ctx ctx;
+  Machine fsm;
+  fsm.Start(ctx);                 // enter Idle
+  fsm.Dispatch(Start{}, ctx);     // refused — guard Homed is false
+  ctx.homed = true;
+  fsm.Dispatch(Start{}, ctx);     // Idle -> Running
+  fsm.Update(ctx);                // Running.Update()
+  fsm.Dispatch(Trip{}, ctx);      // -> Fault (wildcard, from any state)
+  fsm.Stop(ctx);                  // run the active state's OnExit
+}
 ```
 
-> Guards and actions are **default-constructible functor types** (not lambdas — captureless lambdas aren't default-constructible in C++17). They may define `static constexpr std::string_view kName` for nicer traces.
+Richer references in [`examples/`](examples/) (a turnstile and a quadruped control FSM, both runnable and self-checking).
 
 ## Integrate
 
-Header-only. Three supported paths, all exposing the same `ctfsm::ctfsm` target:
+Header-only; pick one (all give `ctfsm::ctfsm`):
 
-**1. Source** — vendor (submodule/subtree) and add the subdirectory:
 ```cmake
-add_subdirectory(third_party/ctfsm)
-target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
-```
-
-**2. `find_package`** — install once, then consume:
-```sh
-cmake -S . -B build && cmake --build build && cmake --install build --prefix /usr/local
-```
-```cmake
+# 1) source: vendor + add_subdirectory(third_party/ctfsm)
+# 2) find_package: cmake --install build --prefix /usr/local; then:
 find_package(ctfsm 0.2.0 REQUIRED)
 target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
+# 3) deb: (cd build && cpack -G DEB) -> sudo dpkg -i ctfsm_*_all.deb
 ```
 
-**3. Debian package** — build a `.deb` and install system-wide:
-```sh
-cmake -S . -B build && cd build && cpack -G DEB        # -> ctfsm_<ver>_all.deb
-sudo dpkg -i ctfsm_*_all.deb                            # installs headers + CMake config
-```
-then use `find_package(ctfsm)` as above.
+Build & test: `cmake -S . -B build && cmake --build build -j && ctest --test-dir build`. As a subproject, tests/examples/install rules default off.
 
-> When `ctfsm` is consumed as a subproject (`add_subdirectory`), its install/package and test/example rules default **off** (`CTFSM_INSTALL`, `CTFSM_BUILD_TESTS`, `CTFSM_BUILD_EXAMPLES`), so it doesn't pollute the parent build.
+## More
 
-Build the tests and examples:
-```sh
-cmake -S . -B build && cmake --build build -j && ctest --test-dir build --output-on-failure
-```
-
-Requires a C++17 compiler. Tests use GoogleTest (fetched automatically).
-
-## Examples
-
-Runnable references in [`examples/`](examples/) — they narrate what they do, self-check, and are registered as CTest tests (so `ctest` runs them too):
-
-- [`turnstile.cpp`](examples/turnstile.cpp) — the minimal "hello world": states, events, an action, an ignored event.
-- [`robot_control.cpp`](examples/robot_control.cpp) — the motivating use case: a quadruped control FSM (`Passive → StandingUp → Standing → Walking`) with guarded transitions, refusal-with-reason, a completion auto-advance, a wildcard E-stop from any state, and a trace observer. Run it to see the trace:
-
-```text
-  [enter]      Passive
-  [refused]    RequestStand in Passive (guard EstimatorReady not satisfied)
-  [transition] Passive --RequestStand--> StandingUp
-  [transition] StandingUp --Completion--> Standing
-  [transition] Standing --RequestWalk--> Walking
-  [transition] Walking --EStop--> Passive
-```
-
-## Lifecycle & contract
-
-```cpp
-Controller c;            // owns the FSM
-fsm.Start(ctx);          // enter the initial state (once)
-while (running) {
-  drain_events_into(fsm, ctx);   // fsm.Dispatch(ev, ctx) per external event
-  fsm.Update(ctx);               // current state's per-tick action (+ auto-transitions)
-}
-fsm.Stop(ctx);           // run the active state's OnExit — your safe-shutdown hook
-```
-
-- **Single-threaded, non-reentrant.** Deliver events from other threads through your own (lock-free) queue and `Dispatch` them on the control thread. A hook must not drive its own machine — set a flag in the context and let the next tick act (or use a `Completion` row).
-- A throwing state hook hits a `noexcept` boundary → `std::terminate` (fail-stop). Keep hooks `noexcept`.
-
-## Limitations (v0.2.0)
-
-Known and deliberate; documented so they're not surprises:
-- **No hierarchy / regions / history** — shared transitions use `AnyState` wildcards; nested-state grouping and resume-state are future work.
-- **One completion transition per `Update`** (bounded, no cascade); a chain of pass-through states advances one per tick.
-- **Events are types, not values** — carry per-event data in the context (e.g. commanded velocity).
-- **Refusal reasons reach the observer, not the `Dispatch` return** (which is `bool`); attach a small observer to capture them programmatically.
-- **Not a certified-safety (MISRA/DO-178) subset** — heavy templates + `std::tuple`/`string_view`. Fine for industrial robotics; a separate effort for certified contexts.
-
-## Status & design
-
-v0.2.0 — production-hardened (verified graph, `Stop`/shutdown, re-entrancy refusal, no-fall-through resolution). Flat states + wildcard rows; hierarchy/regions are future work. Full design, semantics, and the real-time contract: [`docs/design.md`](docs/design.md); release history: [`CHANGELOG.md`](CHANGELOG.md).
+Design, semantics, and the real-time contract: [`docs/design.md`](docs/design.md). Release history and known limitations: [`CHANGELOG.md`](CHANGELOG.md). Single-threaded and non-reentrant by contract; one completion transition per `Update`; events are types (data via the context); not a certified-safety (MISRA/DO-178) subset.
 
 ## License
 
