@@ -67,12 +67,28 @@ add_subdirectory(third_party/ctfsm)
 target_link_libraries(your_target PRIVATE ctfsm::ctfsm)
 ```
 
-Build the tests:
+Build the tests and examples:
 ```sh
 cmake -S . -B build && cmake --build build -j && ctest --test-dir build --output-on-failure
 ```
 
 Requires a C++17 compiler. Tests use GoogleTest (fetched automatically).
+
+## Examples
+
+Runnable references in [`examples/`](examples/) — they narrate what they do, self-check, and are registered as CTest tests (so `ctest` runs them too):
+
+- [`turnstile.cpp`](examples/turnstile.cpp) — the minimal "hello world": states, events, an action, an ignored event.
+- [`robot_control.cpp`](examples/robot_control.cpp) — the motivating use case: a quadruped control FSM (`Passive → StandingUp → Standing → Walking`) with guarded transitions, refusal-with-reason, a completion auto-advance, a wildcard E-stop from any state, and a trace observer. Run it to see the trace:
+
+```text
+  [enter]      Passive
+  [refused]    RequestStand in Passive (guard EstimatorReady not satisfied)
+  [transition] Passive --RequestStand--> StandingUp
+  [transition] StandingUp --Completion--> Standing
+  [transition] Standing --RequestWalk--> Walking
+  [transition] Walking --EStop--> Passive
+```
 
 ## Status & design
 

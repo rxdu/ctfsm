@@ -27,6 +27,12 @@ if(CTFSM_BUILD_TESTS)
   add_test(NAME ctfsm_tests COMMAND ctfsm_tests)
 endif()
 
+# --- examples (runnable references; also registered as tests above) ---
+option(CTFSM_BUILD_EXAMPLES "Build ctfsm examples" ${PROJECT_IS_TOP_LEVEL})
+if(CTFSM_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()
+
 # --- install / export (consumers may also just add_subdirectory or vendor) ---
 include(GNUInstallDirs)
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
