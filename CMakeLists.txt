@@ -37,7 +37,7 @@ if(CTFSM_BUILD_TESTS)
   # Real-time proof: the engine must build and run with NO exceptions and NO
   # RTTI. If a header used throw/typeid/dynamic_cast, this would fail to compile.
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_executable(ctfsm_freestanding test/freestanding.cpp)
+    add_executable(ctfsm_freestanding test/test_freestanding.cpp)
     target_link_libraries(ctfsm_freestanding PRIVATE ctfsm::ctfsm)
     target_compile_options(ctfsm_freestanding
         PRIVATE -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti)
