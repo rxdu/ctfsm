@@ -1,0 +1,4 @@
+# Dev tooling, version-pinned so formatting is identical across machines and CI.
+# (clang-format formatting changes between major versions — the pin, not the
+# .clang-format file alone, is what guarantees consistency.)
+clang-format==22.1.5

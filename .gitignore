@@ -3,3 +3,5 @@
 compile_commands.json
 .cache/
 .DS_Store
+.venv/
+venv/

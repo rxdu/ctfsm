@@ -23,9 +23,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Install pinned clang-format
+        run: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
       - name: Check formatting
         run: |
-          find include test \( -name '*.hpp' -o -name '*.cpp' \) -print0 \
-            | xargs -0 clang-format --dry-run --Werror
+          find include test examples \( -name '*.hpp' -o -name '*.cpp' \) -print0 \
+            | xargs -0 .venv/bin/clang-format --dry-run --Werror
