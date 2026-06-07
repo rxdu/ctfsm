@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Ruixiang Du
+//
+// Negative compile test: this table MUST fail to compile (CMake WILL_FAIL).
 #include "ctfsm/fsm.hpp"
 namespace {
 struct Ctx {};

@@ -1,5 +1,10 @@
 # ctfsm
 
+[![ci](https://github.com/rxdu/ctfsm/actions/workflows/ci.yml/badge.svg)](https://github.com/rxdu/ctfsm/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)
+![header-only](https://img.shields.io/badge/header--only-yes-green.svg)
+
 **A compile-time FSM engine that turns a declarative transition table into a verified, allocation-free state machine for real-time, safety-critical robotics control.**
 
 Header-only C++17. States and the transition graph are plain types: the graph is verified at *compile time*, dispatch is allocation-free with no RTTI or exceptions, and every transition is traceable — real-time and deterministic by construction.
