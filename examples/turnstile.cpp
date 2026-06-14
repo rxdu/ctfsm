@@ -53,11 +53,14 @@ class Turnstile {
     void operator()(Ctx& c) const noexcept { ++c.coins; }
   };
 
-  //                       From    Event  To        Guard          Action
-  using Fsm = ctfsm::StateMachine<
-      Ctx, ctfsm::StateList<Locked, Unlocked>,
-      ctfsm::Table<ctfsm::Row<Locked, Coin, Unlocked, ctfsm::Always, CountCoin>,
-                   ctfsm::Row<Unlocked, Push, Locked>>>;
+  // clang-format off
+  using Fsm = ctfsm::StateMachine<Ctx, ctfsm::StateList<Locked, Unlocked>,
+      ctfsm::Table<
+        //          From       Event  To         Guard           Action
+        ctfsm::Row< Locked,    Coin,  Unlocked,  ctfsm::Always,  CountCoin  >,
+        ctfsm::Row< Unlocked,  Push,  Locked                                >
+      >>;
+  // clang-format on
 
   Ctx ctx_{};
   Fsm fsm_{};

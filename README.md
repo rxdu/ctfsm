@@ -64,6 +64,8 @@ int main() {
 
 Richer references in [`examples/`](examples/) (a turnstile and a quadruped control FSM, both runnable and self-checking).
 
+> **Tip:** the transition table *is* your state diagram, so lay it out as one. Wrap the `Table<…>` in `// clang-format off` / `// clang-format on` and hand-align the rows into `From | Event | To | Guard | Action` columns (see [`examples/robot_control.cpp`](examples/robot_control.cpp)). The whitespace inside `Row<…>` is meaningless to the compiler, so you keep a readable grid without fighting the formatter.
+
 ## Integrate
 
 Header-only; pick one (all give `ctfsm::ctfsm`):

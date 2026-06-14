@@ -116,12 +116,16 @@ class RobotController {
   };
 
   // --- the whole legal graph, declared once and enforced by the engine ---
+  // clang-format off
   using Transitions = ctfsm::Table<
-      ctfsm::Row<Passive, RequestStand, StandingUp, EstimatorReady>,
-      ctfsm::Row<StandingUp, ctfsm::Completion, Standing, StandSettled>,
-      ctfsm::Row<Standing, RequestWalk, Walking, GaitReady>,
-      ctfsm::Row<Walking, RequestStand, Standing>,
-      ctfsm::Row<ctfsm::AnyState, EStop, Passive, ctfsm::Always, MarkEStop>>;
+    //          From              Event               To           Guard           Action
+    ctfsm::Row< Passive,          RequestStand,       StandingUp,  EstimatorReady             >,
+    ctfsm::Row< StandingUp,       ctfsm::Completion,  Standing,    StandSettled               >,  // auto-advance when settled
+    ctfsm::Row< Standing,         RequestWalk,        Walking,     GaitReady                  >,
+    ctfsm::Row< Walking,          RequestStand,       Standing                                >,
+    ctfsm::Row< ctfsm::AnyState,  EStop,              Passive,     ctfsm::Always,  MarkEStop  >  // e-stop from anywhere
+  >;
+  // clang-format on
 
   using Fsm = ctfsm::StateMachine<
       Control, ctfsm::StateList<Passive, StandingUp, Standing, Walking>,
