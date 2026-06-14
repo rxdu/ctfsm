@@ -43,11 +43,14 @@ struct Fault   { void OnEnter(Ctx&) { std::cout << "FAULT\n"; } };
 struct Start {};  struct Trip {};
 struct Homed { bool operator()(const Ctx& c) const noexcept { return c.homed; } };
 
+// clang-format off
 using Machine = ctfsm::StateMachine<Ctx,
-    ctfsm::StateList<Idle, Running, Fault>,                 // first = initial state
+    ctfsm::StateList<Idle, Running, Fault>,                  // first = initial state
     ctfsm::Table<
-        ctfsm::Row<Idle,            Start, Running, Homed>, // guarded: only if homed
-        ctfsm::Row<ctfsm::AnyState, Trip,  Fault>>>;        // wildcard: trip from anywhere
+      //          From             Event   To        Guard
+      ctfsm::Row< Idle,            Start,  Running,  Homed >,  // guarded: only if homed
+      ctfsm::Row< ctfsm::AnyState, Trip,   Fault           >>>;  // wildcard: from anywhere
+// clang-format on
 
 int main() {
   Ctx ctx;
