@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <new>
 #include <type_traits>
@@ -20,7 +21,7 @@
 //     malloc/free). The RT tests bracket the engine's hot path and assert the
 //     count does not move. ---
 namespace {
-std::atomic<long> g_allocations{0};
+std::atomic<std::int64_t> g_allocations{0};
 }  // namespace
 
 void* operator new(std::size_t n) {
@@ -88,7 +89,7 @@ static_assert(sizeof(Fsm) <= 4 * sizeof(void*),
 TEST(Realtime, StartAllocatesNothing) {
   Ctx ctx;
   Fsm fsm;
-  const long before = g_allocations.load();
+  const std::int64_t before = g_allocations.load();
   fsm.Start(ctx);
   EXPECT_EQ(g_allocations.load(), before);
 }
@@ -97,7 +98,7 @@ TEST(Realtime, HotPathAllocatesNothingOverManyTicks) {
   Ctx ctx;
   Fsm fsm;
   fsm.Start(ctx);
-  const long before = g_allocations.load();
+  const std::int64_t before = g_allocations.load();
   for (int i = 0; i < 100000; ++i) {
     fsm.Update(ctx);            // current-state action + completion check
     fsm.Dispatch(Go{}, ctx);    // A -> B (guarded)
@@ -113,7 +114,7 @@ TEST(Realtime, ObserverPathAllocatesNothing) {
   Ctx ctx;
   Fsm fsm(&obs);
   fsm.Start(ctx);
-  const long before = g_allocations.load();
+  const std::int64_t before = g_allocations.load();
   for (int i = 0; i < 10000; ++i) {
     fsm.Dispatch(Go{}, ctx);
     fsm.Dispatch(Back{}, ctx);

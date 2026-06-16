@@ -234,6 +234,10 @@ class StateMachine<Context, StateList<States...>, Table<Rows...>> {
   bool TryRow(Context& ctx, bool& refused, std::string_view& guard) noexcept {
     using From = typename R::from;
     using Ev = typename R::event;
+    // The two early returns are distinct compile-time rejection reasons (event
+    // mismatch vs. wrong pass of the exact-then-wildcard two-pass dispatch),
+    // kept separate for traceability — not a copy-paste clone.
+    // NOLINTNEXTLINE(bugprone-branch-clone)
     if constexpr (!std::is_same_v<Ev, Event>) {
       return false;  // event does not match this row
     } else if constexpr (std::is_same_v<From, AnyState> == Exact) {

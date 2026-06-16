@@ -19,13 +19,13 @@ struct Ctx {
 
 // ---- Turnstile states ----
 struct Locked {
-  void OnEnter(Ctx& c) { c.log.push_back("Locked.enter"); }
-  void Update(Ctx& c) { c.log.push_back("Locked.update"); }
-  void OnExit(Ctx& c) { c.log.push_back("Locked.exit"); }
+  void OnEnter(Ctx& c) { c.log.emplace_back("Locked.enter"); }
+  void Update(Ctx& c) { c.log.emplace_back("Locked.update"); }
+  void OnExit(Ctx& c) { c.log.emplace_back("Locked.exit"); }
 };
 struct Unlocked {
-  void OnEnter(Ctx& c) { c.log.push_back("Unlocked.enter"); }
-  void OnExit(Ctx& c) { c.log.push_back("Unlocked.exit"); }
+  void OnEnter(Ctx& c) { c.log.emplace_back("Unlocked.enter"); }
+  void OnExit(Ctx& c) { c.log.emplace_back("Unlocked.exit"); }
   // intentionally no Update() — proves the hook is optional
 };
 

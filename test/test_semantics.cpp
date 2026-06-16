@@ -54,9 +54,9 @@ struct LogCtx {
   std::vector<std::string> log;
 };
 struct Active {
-  void OnEnter(LogCtx& c) { c.log.push_back("Active.enter"); }
+  void OnEnter(LogCtx& c) { c.log.emplace_back("Active.enter"); }
   void OnExit(LogCtx& c) {
-    c.log.push_back("Active.exit");
+    c.log.emplace_back("Active.exit");
   }  // e.g. zero torques
 };
 struct Other {};
