@@ -14,7 +14,7 @@ jobs:
         compiler: [g++, clang++]
     name: build-test (${{ matrix.compiler }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ clang ninja-build
       - name: Configure
@@ -27,10 +27,26 @@ jobs:
   format:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install pinned clang-format
         run: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
       - name: Check formatting
         run: |
           find include test examples \( -name '*.hpp' -o -name '*.cpp' \) -print0 \
             | xargs -0 .venv/bin/clang-format --dry-run --Werror
+
+  tidy:
+    name: clang-tidy (pinned)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build
+      - name: Install pinned clang-tidy
+        run: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+      - name: Configure (generates compile_commands.json)
+        # No build needed — tidy reads compile_commands.json. Configure fetches
+        # googletest so the test TUs land in the compile DB and get linted too.
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Lint
+        run: CLANG_TIDY=.venv/bin/clang-tidy scripts/tidy.sh

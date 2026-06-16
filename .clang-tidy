@@ -1,0 +1,90 @@
+# ctfsm C++ linting: Google style + correctness/perf, version-pinned (see
+# requirements-dev.txt) so results are identical across machines and CI.
+#
+# clang-format only sees layout; this enforces what it cannot — naming, and the
+# correctness/perf/modernization rules that matter for a freestanding,
+# allocation-free, no-RTTI/no-exceptions FSM engine. Style baseline is Google.
+#
+# Run with scripts/tidy.sh. Disabled checks below each carry the reason they
+# don't fit this header-only, template-heavy library, so the set stays honest.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  google-*,
+  modernize-*,
+  performance-*,
+  readability-identifier-naming,
+  -bugprone-easily-swappable-parameters,
+  -google-readability-braces-around-statements,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  -clang-diagnostic-gcc-install-dir-libstdcxx,
+
+# Reasons for the opt-outs above:
+#   bugprone-easily-swappable-parameters  — noisy on generic interfaces; adjacent
+#       same-type params are inherent, not a defect.
+#   google-readability-braces-around-statements — pure layout; owned by
+#       .clang-format, not a semantic rule.
+#   modernize-use-trailing-return-type    — conflicts with the Google
+#       leading-return-type style.
+#   modernize-use-nodiscard               — opinionated [[nodiscard]] spam.
+#   clang-diagnostic-gcc-install-dir-libstdcxx — environmental: which GCC's
+#       libstdc++ clang picks; a property of the build host, not the code.
+
+# Every finding is an error in CI — a gate that allows warnings to accumulate is
+# not a gate. Local runs see the same, so nothing rots silently.
+WarningsAsErrors: '*'
+
+# Lint our own headers (diagnostics surface through the example/test TUs that
+# include them); never third_party or the standard library.
+HeaderFilterRegex: 'include/ctfsm/'
+FormatStyle: file
+
+CheckOptions:
+  # --- naming (Google) — exactly the rules the formatter is blind to ---
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.UnionCase: CamelCase
+  # ctfsm's trait/metafunction layer deliberately mirrors `std::` type-traits
+  # naming: snake_case `is_*`/`has_*` traits (inheriting std::true_type), `_v`
+  # variable-template suffixes, and snake_case member aliases (Row::from / ::to /
+  # ::event, like std::pair::first_type). For a library that extends the standard
+  # library, that IS the idiomatic convention — Google CamelCase-for-types does
+  # not apply to it. So pure-snake_case names are exempted for these categories,
+  # while `camelBack` mistakes are still caught; the public API (StateMachine,
+  # Table, Row, ...) is CamelCase and covered by ClassCase/StructCase above.
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.StructIgnoredRegexp: '[a-z][a-z0-9_]*'
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TypedefIgnoredRegexp: '[a-z][a-z0-9_]*'
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TypeAliasIgnoredRegexp: '[a-z][a-z0-9_]*'
+  readability-identifier-naming.PublicMemberCase: lower_case
+  readability-identifier-naming.ProtectedMemberCase: lower_case
+  readability-identifier-naming.ProtectedMemberSuffix: _
+  readability-identifier-naming.PrivateMemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: _
+  readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.ParameterCase: lower_case
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.EnumConstantPrefix: k
+  readability-identifier-naming.GlobalConstantCase: CamelCase
+  readability-identifier-naming.GlobalConstantPrefix: k
+  readability-identifier-naming.StaticConstantCase: CamelCase
+  readability-identifier-naming.StaticConstantPrefix: k
+  readability-identifier-naming.ClassConstantCase: CamelCase
+  readability-identifier-naming.ClassConstantPrefix: k
+  readability-identifier-naming.ConstexprVariableCase: CamelCase
+  readability-identifier-naming.ConstexprVariablePrefix: k
+  # `is_state_v` / `key_multiplicity` etc. are STL-style compile-time values, not
+  # k-prefixed program constants — exempt snake_case (see the trait note above).
+  readability-identifier-naming.ConstexprVariableIgnoredRegexp: '[a-z][a-z0-9_]*'
+
+  # NOT enforced here, deliberately:
+  #   FunctionCase / MethodCase — Google permits variable-style (snake_case)
+  #       accessors which this check cannot model; function naming stays a
+  #       review concern.
+  #   MacroDefinitionCase — fires on third-party/system macros that leak through
+  #       and mis-flags correct guards; pure noise.

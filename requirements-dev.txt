@@ -1,4 +1,8 @@
-# Dev tooling, version-pinned so formatting is identical across machines and CI.
-# (clang-format formatting changes between major versions — the pin, not the
-# .clang-format file alone, is what guarantees consistency.)
+# Dev tooling, version-pinned so formatting + linting are identical across
+# machines and CI. (clang-format/clang-tidy diagnostics change between versions —
+# the pin, not the .clang-format / .clang-tidy files alone, is what guarantees
+# consistency.) Both ship from the same wheel family (ssciwr); they track LLVM
+# but their patch numbers are not byte-aligned (clang-tidy's latest LLVM-22.1
+# wheel is 22.1.0.1). Same major.minor → same checks/formatting.
 clang-format==22.1.5
+clang-tidy==22.1.0.1

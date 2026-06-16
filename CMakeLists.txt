@@ -8,6 +8,8 @@ if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
+  # clang-tidy (scripts/tidy.sh) reads this to lint the example/test TUs.
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
 # --- the header-only library ---
@@ -63,6 +65,24 @@ endif()
 option(CTFSM_BUILD_EXAMPLES "Build ctfsm examples" ${PROJECT_IS_TOP_LEVEL})
 if(CTFSM_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+
+# --- lint convenience targets (delegate to scripts/tidy.sh, the single source of
+# truth for the linted file set). Set CLANG_TIDY in the environment to point at
+# the pinned binary if needed. Top-level only. ---
+if(PROJECT_IS_TOP_LEVEL)
+  add_custom_target(tidy
+      COMMAND "${CMAKE_COMMAND}" -E env "BUILD_DIR=${CMAKE_BINARY_DIR}"
+              "${CMAKE_SOURCE_DIR}/scripts/tidy.sh"
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      COMMENT "clang-tidy: linting ctfsm (Google style + correctness/perf)"
+      VERBATIM)
+  add_custom_target(tidy-fix
+      COMMAND "${CMAKE_COMMAND}" -E env "BUILD_DIR=${CMAKE_BINARY_DIR}"
+              "${CMAKE_SOURCE_DIR}/scripts/tidy.sh" --fix
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      COMMENT "clang-tidy: applying safe fixes"
+      VERBATIM)
 endif()
 
 # --- install / export / package (gated; off when ctfsm is a subproject) ---

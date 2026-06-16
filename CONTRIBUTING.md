@@ -11,15 +11,18 @@ ctest --test-dir build --output-on-failure
 
 Requires a C++17 compiler (GCC or Clang). GoogleTest is fetched automatically.
 
-## Formatting
+## Formatting & linting
 
-Google style via clang-format, **version-pinned** so everyone formats identically:
+Google style, **version-pinned** so everyone gets identical results. clang-format owns layout; clang-tidy owns what the formatter can't see — naming, correctness, performance, modernization (config + rationale in [`.clang-tidy`](.clang-tidy)). Both are CI gates.
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 find include test examples \( -name '*.hpp' -o -name '*.cpp' \) -print0 \
   | xargs -0 .venv/bin/clang-format -i        # add --dry-run --Werror to check
+CLANG_TIDY=.venv/bin/clang-tidy scripts/tidy.sh   # or: cmake --build build --target tidy
 ```
+
+clang-tidy lints the example/test TUs the build compiled, so configure first (`cmake -S . -B build`). The trait/metafunction layer intentionally follows `std::` type-traits naming (snake_case `is_*`/`has_*`, `_v` suffixes, `Row::from`/`to` aliases) — that carve-out is documented in `.clang-tidy`.
 
 ## Guidelines
 
