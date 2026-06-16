@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# pre-push: run the full clang-tidy gate before anything leaves the machine, so
+# you never push a lint failure and wait for CI to tell you. Slower than commit,
+# but push is infrequent — the right place for the expensive check.
+#
+# Skipped (with a notice) when no configured build exists: clang-tidy needs
+# compile_commands.json, and CI is the real backstop, so a missing local build
+# must not hard-block a push.
+#
+# Activate once per clone: scripts/hooks/install.sh
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+BUILD_DIR="${BUILD_DIR:-build}"
+if [ ! -f "$BUILD_DIR/compile_commands.json" ]; then
+  echo "pre-push: no $BUILD_DIR/compile_commands.json — skipping clang-tidy (CI will run it)." >&2
+  echo "          configure a build to lint locally: cmake -S . -B $BUILD_DIR" >&2
+  exit 0
+fi
+
+# Prefer the pinned venv binary, then an explicit override, then PATH.
+CT="${CLANG_TIDY:-}"
+[ -z "$CT" ] && [ -x .venv/bin/clang-tidy ] && CT=.venv/bin/clang-tidy
+[ -z "$CT" ] && CT=clang-tidy
+command -v "$CT" >/dev/null 2>&1 || {
+  echo "pre-push: clang-tidy not found ('$CT') — skipping (CI still gates)." >&2
+  exit 0
+}
+export CLANG_TIDY="$CT" BUILD_DIR
+
+exec scripts/tidy.sh
